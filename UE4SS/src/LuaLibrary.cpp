@@ -9,6 +9,8 @@
 #include <Unreal/FOutputDevice.hpp>
 #include <Unreal/UnrealInitializer.hpp>
 
+#include <Windows.h>
+
 namespace RC::LuaLibrary
 {
     auto get_outputdevice_ref(const LuaMadeSimple::Lua& lua) -> const Unreal::FOutputDevice*
@@ -64,7 +66,7 @@ namespace RC::LuaLibrary
 
         Output::send(formatted_string);
 
-        if (output_device) output_device->Log(outdevice_string.c_str());
+        if (output_device) output_device->Log(FromCharTypePtr<TCHAR>(outdevice_string.c_str()));
 
         return 0;
     }
@@ -98,7 +100,7 @@ namespace RC::LuaLibrary
         // Logging will only happen to the debug console but it's something at least
         if (!Output::has_internal_error())
         {
-            Output::send(STR("Error: {}\n"), to_wstring(e));
+            Output::send(STR("Error: {}\n"), ensure_str(e));
         }
         else
         {
@@ -106,31 +108,31 @@ namespace RC::LuaLibrary
         }
     }
 
-    static auto exported_function_status_to_string(ExportedFunctionStatus status) -> std::wstring_view
+    static auto exported_function_status_to_string(ExportedFunctionStatus status) -> StringViewType
     {
         switch (status)
         {
         case ExportedFunctionStatus::NO_ERROR_TO_EXPORT:
-            return L"NO_ERROR_TO_EXPORT | 0";
+            return STR("NO_ERROR_TO_EXPORT | 0");
         case ExportedFunctionStatus::UNKNOWN_ERROR:
-            return L"UNKNOWN_ERROR | 7";
+            return STR("UNKNOWN_ERROR | 7");
         case ExportedFunctionStatus::SUCCESS:
-            return L"SUCCESS | 1";
+            return STR("SUCCESS | 1");
         case ExportedFunctionStatus::VARIABLE_NOT_FOUND:
-            return L"VARIABLE_NOT_FOUND | 2";
+            return STR("VARIABLE_NOT_FOUND | 2");
         case ExportedFunctionStatus::MOD_IS_NULLPTR:
-            return L"MOD_IS_NULLPTR | 3";
+            return STR("MOD_IS_NULLPTR | 3");
         case ExportedFunctionStatus::SCRIPT_FUNCTION_RETURNED_FALSE:
-            return L"SCRIPT_FUNCTION_RETURNED_FALSE | 4";
+            return STR("SCRIPT_FUNCTION_RETURNED_FALSE | 4");
         case ExportedFunctionStatus::UNABLE_TO_CALL_SCRIPT_FUNCTION:
-            return L"UNABLE_TO_CALL_SCRIPT_FUNCTION | 5";
+            return STR("UNABLE_TO_CALL_SCRIPT_FUNCTION | 5");
         case ExportedFunctionStatus::SCRIPT_FUNCTION_NOT_FOUND:
-            return L"SCRIPT_FUNCTION_NOT_FOUND | 6";
+            return STR("SCRIPT_FUNCTION_NOT_FOUND | 6");
         case ExportedFunctionStatus::UE4SS_NOT_INITIALIZED:
-            return L"UE4SS_NOT_INITIALIZED | 8";
+            return STR("UE4SS_NOT_INITIALIZED | 8");
         }
 
-        return L"Missed switch case";
+        return STR("Missed switch case");
     }
 
     auto get_lua_state_by_mod_name(const char* mod_name) -> lua_State*
@@ -150,7 +152,7 @@ namespace RC::LuaLibrary
         auto* mod = UE4SSProgram::find_lua_mod_by_name(mod_name);
         if (!mod || !mod->is_installed() || !mod->is_started())
         {
-            auto error_message = std::format("No mod by name '{}' found.", mod_name);
+            auto error_message = fmt::format("No mod by name '{}' found.", mod_name);
             std::memcpy(output_buffer, error_message.data(), error_message.size());
             return output_buffer;
         }
@@ -159,12 +161,12 @@ namespace RC::LuaLibrary
         {
             if (int status = luaL_loadstring(mod->lua().get_lua_state(), script); status != LUA_OK)
             {
-                mod->lua().throw_error(std::format("luaL_loadstring returned {}", mod->lua().resolve_status_message(status, true)));
+                mod->lua().throw_error(fmt::format("luaL_loadstring returned {}", mod->lua().resolve_status_message(status, true)));
             }
 
             if (int status = lua_pcall(mod->lua().get_lua_state(), 0, LUA_MULTRET, 0); status != LUA_OK)
             {
-                mod->lua().throw_error(std::format("lua_pcall returned {}", mod->lua().resolve_status_message(status, true)));
+                mod->lua().throw_error(fmt::format("lua_pcall returned {}", mod->lua().resolve_status_message(status, true)));
             }
         }
         catch (std::runtime_error& e)

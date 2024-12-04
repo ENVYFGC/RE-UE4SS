@@ -21,6 +21,8 @@
 #include <Unreal/UScriptStruct.hpp>
 #include <Unreal/UnrealVersion.hpp>
 
+#include "UE4SSProgram.hpp"
+
 namespace RC::OutTheShade
 {
     using namespace ::RC::Unreal;
@@ -297,11 +299,11 @@ namespace RC::OutTheShade
             if (Object->GetClassPrivate() == UClass::StaticClass() || Object->GetClassPrivate() == UScriptStruct::StaticClass() ||
                 Object->GetClassPrivate() == UEnum::StaticClass())
             {
-                std::wstring RawPathName = Object->GetPathName();
-                std::wstring::size_type PathNameStart =
+                StringType RawPathName = Object->GetPathName();
+                StringType::size_type PathNameStart =
                         0; // include first bit (Script/Game) to avoid ambiguity; to drop it, replace with RawPathName.find_first_of('/', 1) + 1;
-                std::wstring::size_type PathNameLength = RawPathName.find_last_of('.') - PathNameStart;
-                std::wstring FinalPathStr = RawPathName.substr(PathNameStart, PathNameLength);
+                StringType::size_type PathNameLength = RawPathName.find_last_of('.') - PathNameStart;
+                StringType FinalPathStr = RawPathName.substr(PathNameStart, PathNameLength);
                 FName FinalPathName = FName(FinalPathStr);
 
                 NameMap.insert_or_assign(FinalPathName, 0);
@@ -504,7 +506,8 @@ namespace RC::OutTheShade
         UsmapData.resize(UncompressedStream.size());
         memcpy(UsmapData.data(), UncompressedStream.data(), UsmapData.size());
 
-        auto FileOutput = FileWriter("Mappings.usmap");
+        auto filename = to_string(UE4SSProgram::get_program().get_working_directory()) + "//Mappings.usmap";
+        auto FileOutput = FileWriter(filename.c_str());
 
         FileOutput.Write<uint16_t>(0x30C4); // magic
         FileOutput.Write<uint8_t>(0);       // version

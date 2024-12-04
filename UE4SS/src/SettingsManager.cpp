@@ -61,6 +61,7 @@ namespace RC
         constexpr static File::CharType section_engine_version_override[] = STR("EngineVersionOverride");
         REGISTER_INT64_SETTING(EngineVersionOverride.MajorVersion, section_engine_version_override, MajorVersion)
         REGISTER_INT64_SETTING(EngineVersionOverride.MinorVersion, section_engine_version_override, MinorVersion)
+        REGISTER_BOOL_SETTING(EngineVersionOverride.DebugBuild, section_engine_version_override, DebugBuild)
 
         constexpr static File::CharType section_object_dumper[] = STR("ObjectDumper");
         REGISTER_BOOL_SETTING(ObjectDumper.LoadAllAssetsBeforeDumpingObjects, section_object_dumper, LoadAllAssetsBeforeDumpingObjects)
@@ -93,7 +94,6 @@ namespace RC
         {
             Debug.GraphicsAPI = GUI::GfxBackend::GLFW3_OpenGL3;
         }
-        REGISTER_INT64_SETTING(Debug.LiveViewObjectsPerGroup, section_debug, LiveViewObjectsPerGroup);
 
         constexpr static File::CharType section_crash_dump[] = STR("CrashDump");
         REGISTER_BOOL_SETTING(CrashDump.EnableDumping, section_crash_dump, EnableDumping);

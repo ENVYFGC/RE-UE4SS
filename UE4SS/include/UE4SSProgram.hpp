@@ -21,9 +21,17 @@
 #include <Unreal/Core/Containers/Array.hpp>
 #include <Unreal/UnrealVersion.hpp>
 
+#include <String/StringType.hpp>
+
 // Used to set up ImGui context and allocator in DLL mods
 #define UE4SS_ENABLE_IMGUI()                                                                                                                                   \
+    /* Wait for UE4SS to create the imgui context. */                                                                                                          \
+    /* Without this, we're setting the context to nullptr and eventually crashing when we use any imgui functions. */                                          \
     {                                                                                                                                                          \
+        while ((UE4SSProgram::settings_manager.Debug.DebugConsoleVisible || UE4SSProgram::get_program().m_render_thread.get_id() != std::jthread::id{}) &&     \
+               !UE4SSProgram::get_program().get_current_imgui_context())                                                                                       \
+        {                                                                                                                                                      \
+        }                                                                                                                                                      \
         ImGui::SetCurrentContext(UE4SSProgram::get_current_imgui_context());                                                                                   \
         ImGuiMemAllocFunc alloc_func{};                                                                                                                        \
         ImGuiMemFreeFunc free_func{};                                                                                                                          \
@@ -62,12 +70,25 @@ namespace RC
         uint64_t safety_padding[8]{0};
     };
 
+    struct KeyDownEventData
+    {
+        // Custom data from the C++ mod.
+        // The 'custom_data' variable to UE4SSProgram::register_keydown_event will be used to determine the type of custom_data2.
+        uint8_t custom_data{};
+
+        // The C++ mod that created this event.
+        CppUserModBase* mod{};
+    };
+
     class UE4SSProgram : public MProgram
     {
       public:
-        constexpr static wchar_t m_settings_file_name[] = L"UE4SS-settings.ini";
-        constexpr static wchar_t m_log_file_name[] = L"UE4SS.log";
-        constexpr static wchar_t m_object_dumper_file_name[] = L"UE4SS_ObjectDump.txt";
+        friend class CppUserModBase; // m_input_handler
+
+      public:
+        constexpr static CharType m_settings_file_name[] = STR("UE4SS-settings.ini");
+        constexpr static CharType m_log_file_name[] = STR("UE4SS.log");
+        constexpr static CharType m_object_dumper_file_name[] = STR("UE4SS_ObjectDump.txt");
 
       public:
         RC_UE4SS_API static SettingsManager settings_manager;
@@ -79,6 +100,8 @@ namespace RC
       protected:
         Input::Handler m_input_handler{L"ConsoleWindowClass", L"UnrealWindow"};
         std::jthread m_event_loop;
+
+      public:
         std::jthread m_render_thread;
 
       private:
@@ -95,6 +118,7 @@ namespace RC
         std::filesystem::path m_object_dumper_output_directory;
         std::filesystem::path m_default_settings_path_and_file;
         std::filesystem::path m_settings_path_and_file;
+        std::filesystem::path m_legacy_root_directory;
         Output::DebugConsoleDevice* m_debug_console_device{};
         Output::ConsoleDevice* m_console_device{};
         GUI::DebuggingGUI m_debugging_gui{};
@@ -122,9 +146,9 @@ namespace RC
         uint64_t m_hook_trampoline_load_library_ex_w;
 
       public:
-        static inline std::vector<std::unique_ptr<Mod>> m_mods;
+        std::vector<std::unique_ptr<Mod>> m_mods;
 
-        static inline RecognizableStruct m_shared_functions{};
+        RecognizableStruct m_shared_functions{};
 
         static inline UE4SSProgram* s_program{};
 
@@ -146,13 +170,13 @@ namespace RC
         };
 
       public:
-        UE4SSProgram(const std::wstring& ModuleFilePath, std::initializer_list<BinaryOptions> options);
+        UE4SSProgram(const std::filesystem::path& ModuleFilePath, std::initializer_list<BinaryOptions> options);
         ~UE4SSProgram();
         UE4SSProgram(const UE4SSProgram&) = delete;
         UE4SSProgram(UE4SSProgram&&) = delete;
 
       private:
-        auto setup_paths(const std::wstring& moduleFilePath) -> void;
+        auto setup_paths(const std::filesystem::path& moduleFilePath) -> void;
         enum class FunctionStatus
         {
             Success,
@@ -170,22 +194,30 @@ namespace RC
       protected:
         auto update() -> void;
         auto setup_cpp_mods() -> void;
-        auto start_cpp_mods() -> void;
+        enum class IsInitialStartup
+        {
+            Yes,
+            No
+        };
+        auto start_cpp_mods(IsInitialStartup = IsInitialStartup::No) -> void;
         auto setup_mods() -> void;
         auto start_lua_mods() -> void;
         auto uninstall_mods() -> void;
         auto fire_unreal_init_for_cpp_mods() -> void;
+        auto fire_ui_init_for_cpp_mods() -> void;
         auto fire_program_start_for_cpp_mods() -> void;
-        auto fire_dll_load_for_cpp_mods(std::wstring_view dll_name) -> void;
+        auto fire_dll_load_for_cpp_mods(StringViewType dll_name) -> void;
 
       public:
         auto init() -> void;
         auto is_program_started() -> bool;
         auto reinstall_mods() -> void;
         auto get_object_dumper_output_directory() -> const File::StringType;
-        RC_UE4SS_API auto get_module_directory() -> File::StringViewType;
-        RC_UE4SS_API auto get_working_directory() -> File::StringViewType;
-        RC_UE4SS_API auto get_mods_directory() -> File::StringViewType;
+        RC_UE4SS_API auto get_module_directory() -> File::StringType;
+        RC_UE4SS_API auto get_game_executable_directory() -> File::StringType;
+        RC_UE4SS_API auto get_working_directory() -> File::StringType;
+        RC_UE4SS_API auto get_mods_directory() -> File::StringType;
+        RC_UE4SS_API auto get_legacy_root_directory() -> File::StringType;
         RC_UE4SS_API auto generate_uht_compatible_headers() -> void;
         RC_UE4SS_API auto generate_cxx_headers(const std::filesystem::path& output_dir) -> void;
         RC_UE4SS_API auto generate_lua_types(const std::filesystem::path& output_dir) -> void;
@@ -213,9 +245,12 @@ namespace RC
 
       public:
         // API pass-through for use outside the private scope of UE4SSProgram
-        RC_UE4SS_API auto register_keydown_event(Input::Key, const Input::EventCallbackCallable&, uint8_t custom_data = 0) -> void;
-        RC_UE4SS_API auto register_keydown_event(Input::Key, const Input::Handler::ModifierKeyArray&, const Input::EventCallbackCallable&, uint8_t custom_data = 0)
-                -> void;
+        RC_UE4SS_API auto register_keydown_event(Input::Key, const Input::EventCallbackCallable&, uint8_t custom_data = 0, void* custom_data2 = nullptr) -> void;
+        RC_UE4SS_API auto register_keydown_event(Input::Key,
+                                                 const Input::Handler::ModifierKeyArray&,
+                                                 const Input::EventCallbackCallable&,
+                                                 uint8_t custom_data = 0,
+                                                 void* custom_data2 = nullptr) -> void;
         RC_UE4SS_API auto is_keydown_event_registered(Input::Key) -> bool;
         RC_UE4SS_API auto is_keydown_event_registered(Input::Key, const Input::Handler::ModifierKeyArray&) -> bool;
 
@@ -224,7 +259,7 @@ namespace RC
         static auto install_lua_mods() -> void;
 
         using FMBNI_ExtraPredicate = std::function<bool(Mod*)>;
-        static auto find_mod_by_name_internal(std::wstring_view mod_name,
+        static auto find_mod_by_name_internal(StringViewType mod_name,
                                               IsInstalled = IsInstalled::No,
                                               IsStarted = IsStarted::No,
                                               FMBNI_ExtraPredicate extra_predicate = {}) -> Mod*;
@@ -236,7 +271,7 @@ namespace RC
         RC_UE4SS_API static auto dump_all_objects_and_properties(const File::StringType& output_path_and_file_name) -> void;
 
         template <typename T>
-        static auto find_mod_by_name(std::wstring_view mod_name, IsInstalled = IsInstalled::No, IsStarted = IsStarted::No) -> T*
+        static auto find_mod_by_name(StringViewType mod_name, IsInstalled = IsInstalled::No, IsStarted = IsStarted::No) -> T*
         {
             std::abort();
         };
@@ -246,14 +281,14 @@ namespace RC
             std::abort();
         };
         template <>
-        auto find_mod_by_name<LuaMod>(std::wstring_view mod_name, IsInstalled is_installed, IsStarted is_started) -> LuaMod*
+        auto find_mod_by_name<LuaMod>(StringViewType mod_name, IsInstalled is_installed, IsStarted is_started) -> LuaMod*
         {
             return static_cast<LuaMod*>(find_mod_by_name_internal(mod_name, is_installed, is_started, [](auto elem) -> bool {
                 return dynamic_cast<LuaMod*>(elem);
             }));
         }
         template <>
-        auto find_mod_by_name<CppMod>(std::wstring_view mod_name, IsInstalled is_installed, IsStarted is_started) -> CppMod*
+        auto find_mod_by_name<CppMod>(StringViewType mod_name, IsInstalled is_installed, IsStarted is_started) -> CppMod*
         {
             return static_cast<CppMod*>(find_mod_by_name_internal(mod_name, is_installed, is_started, [](auto elem) -> bool {
                 return dynamic_cast<CppMod*>(elem);
@@ -262,15 +297,15 @@ namespace RC
         template <>
         auto find_mod_by_name<LuaMod>(std::string_view mod_name, IsInstalled is_installed, IsStarted is_started) -> LuaMod*
         {
-            return find_mod_by_name<LuaMod>(to_wstring(mod_name), is_installed, is_started);
+            return find_mod_by_name<LuaMod>(ensure_str(mod_name), is_installed, is_started);
         }
         template <>
         auto find_mod_by_name<CppMod>(std::string_view mod_name, IsInstalled is_installed, IsStarted is_started) -> CppMod*
         {
-            return find_mod_by_name<CppMod>(to_wstring(mod_name), is_installed, is_started);
+            return find_mod_by_name<CppMod>(ensure_str(mod_name), is_installed, is_started);
         }
 
-        RC_UE4SS_API static auto find_lua_mod_by_name(std::wstring_view mod_name, IsInstalled = IsInstalled::No, IsStarted = IsStarted::No) -> LuaMod*;
+        RC_UE4SS_API static auto find_lua_mod_by_name(StringViewType mod_name, IsInstalled = IsInstalled::No, IsStarted = IsStarted::No) -> LuaMod*;
         RC_UE4SS_API static auto find_lua_mod_by_name(std::string_view mod_name, IsInstalled = IsInstalled::No, IsStarted = IsStarted::No) -> LuaMod*;
         static auto static_cleanup() -> void;
         RC_UE4SS_API static auto get_program() -> UE4SSProgram&

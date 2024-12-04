@@ -22,10 +22,12 @@
 #include <Windows.h>
 #include <dbghelp.h>
 
+#include <String/StringType.hpp>
+
 namespace RC::UVTD
 {
     bool processing_events{false};
-    Input::Handler input_handler{L"ConsoleWindowClass", L"UnrealWindow"};
+    Input::Handler input_handler{STR("ConsoleWindowClass"), STR("UnrealWindow")};
 
     auto static event_loop_update() -> void
     {
@@ -63,6 +65,7 @@ namespace RC::UVTD
                 "PDBs/5_01.pdb",
                 "PDBs/5_02.pdb",
                 "PDBs/5_03.pdb",
+                "PDBs/5_04.pdb",
         };
 
         UnrealVirtualGenerator::output_cleanup();

@@ -31,6 +31,7 @@ namespace RC
         {
             int64_t MajorVersion{-1};
             int64_t MinorVersion{-1};
+            bool DebugBuild{false};
         } EngineVersionOverride;
 
         struct SectionObjectDumper
@@ -62,7 +63,6 @@ namespace RC
             bool DebugConsoleVisible{true};
             float DebugGUIFontScaling{1.0};
             GUI::GfxBackend GraphicsAPI{GUI::GfxBackend::GLFW3_OpenGL3};
-            int64_t LiveViewObjectsPerGroup{64 * 1024 / 2};
         } Debug;
 
         struct SectionCrashDump

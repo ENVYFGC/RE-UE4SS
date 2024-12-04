@@ -6,11 +6,14 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <filesystem>
 
 #include <Common.hpp>
 #include <File/File.hpp>
 #include <LuaMadeSimple/LuaMadeSimple.hpp>
 #include <Mod/Mod.hpp>
+
+#include <String/StringType.hpp>
 
 namespace RC
 {
@@ -26,7 +29,7 @@ namespace RC
     class LuaMod : public Mod
     {
       private:
-        std::wstring m_scripts_path;
+        std::filesystem::path m_scripts_path;
         LuaMadeSimple::Lua& m_lua;
 
       public:
@@ -83,7 +86,14 @@ namespace RC
             Unreal::UClass* instance_of_class;
             std::vector<std::pair<const LuaMadeSimple::Lua*, RegistryIndex>> registry_indexes;
         };
-        static inline std::vector<LuaCallbackData> m_static_construct_object_lua_callbacks;
+        struct LuaCancellableCallbackData
+        {
+            const LuaMadeSimple::Lua* lua;
+            Unreal::UClass* instance_of_class;
+            int32_t lua_callback_function_ref{};
+            int32_t lua_callback_thread_ref{};
+        };
+        static inline std::vector<LuaCancellableCallbackData> m_static_construct_object_lua_callbacks;
         static inline std::vector<LuaCallbackData> m_process_console_exec_pre_callbacks;
         static inline std::vector<LuaCallbackData> m_process_console_exec_post_callbacks;
         static inline std::vector<LuaCallbackData> m_call_function_by_name_with_arguments_pre_callbacks;
@@ -117,7 +127,7 @@ namespace RC
         std::mutex m_actions_lock{};
 
       public:
-        LuaMod(UE4SSProgram&, std::wstring&& mod_name, std::wstring&& mod_path);
+        LuaMod(UE4SSProgram&, StringType&& mod_name, StringType&& mod_path);
         ~LuaMod() override = default;
 
       private:

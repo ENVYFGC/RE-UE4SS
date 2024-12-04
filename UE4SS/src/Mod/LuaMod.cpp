@@ -127,12 +127,13 @@ namespace RC
         LuaType::RemoteUnrealParam::construct(lua_data.lua, &context.Context, s_object_property_name);
 
         // Attempt at dynamically fetching the params
-        uint16_t return_value_offset = context.TheStack.CurrentNativeFunction()->GetReturnValueOffset();
+        const auto FunctionBeingExecuted = lua_data.unreal_function;
+        uint16_t return_value_offset = FunctionBeingExecuted->GetReturnValueOffset();
 
         // 'ReturnValueOffset' is 0xFFFF if the UFunction return type is void
         lua_data.has_return_value = return_value_offset != 0xFFFF;
 
-        uint8_t num_unreal_params = context.TheStack.CurrentNativeFunction()->GetNumParms();
+        uint8_t num_unreal_params = FunctionBeingExecuted->GetNumParms();
         if (lua_data.has_return_value)
         {
             // Subtract one from the number of params if there's a return value
@@ -145,7 +146,7 @@ namespace RC
         {
             // int32_t current_param_offset{};
 
-            for (Unreal::FProperty* func_prop : context.TheStack.CurrentNativeFunction()->ForEachProperty())
+            for (Unreal::FProperty* func_prop : FunctionBeingExecuted->ForEachProperty())
             {
                 // Skip this property if it's not a parameter
                 if (!func_prop->HasAnyPropertyFlags(Unreal::EPropertyFlags::CPF_Parm))
@@ -190,7 +191,7 @@ namespace RC
                 }
                 else
                 {
-                    lua_data.lua.throw_error(std::format(
+                    lua_data.lua.throw_error(fmt::format(
                             "[unreal_script_function_hook] Tried accessing unreal property without a registered handler. Property type '{}' not supported.",
                             to_string(property_type.ToString())));
                 }
@@ -253,8 +254,8 @@ namespace RC
                     // If the type wasn't supported then we simply clean the Lua stack, output a warning and then do nothing
                     lua_data.lua.discard_value();
 
-                    std::wstring parameter_type_name = property_type_name.ToString();
-                    std::wstring parameter_name = lua_data.return_property->GetName();
+                    auto parameter_type_name = property_type_name.ToString();
+                    auto parameter_name = lua_data.return_property->GetName();
 
                     Output::send(
                             STR("Tried altering return value of a hooked UFunction without a registered handler for return type Return property '{}' of type "
@@ -276,12 +277,13 @@ namespace RC
             LuaType::RemoteUnrealParam::construct(lua_data.lua, &context.Context, s_object_property_name);
 
             // Attempt at dynamically fetching the params
-            uint16_t return_value_offset = context.TheStack.CurrentNativeFunction()->GetReturnValueOffset();
+            const auto FunctionBeingExecuted = lua_data.unreal_function;
+            uint16_t return_value_offset = FunctionBeingExecuted->GetReturnValueOffset();
 
             // 'ReturnValueOffset' is 0xFFFF if the UFunction return type is void
             lua_data.has_return_value = return_value_offset != 0xFFFF;
 
-            uint8_t num_unreal_params = context.TheStack.CurrentNativeFunction()->GetNumParms();
+            uint8_t num_unreal_params = FunctionBeingExecuted->GetNumParms();
             if (lua_data.has_return_value)
             {
                 // Subtract one from the number of params if there's a return value
@@ -289,7 +291,7 @@ namespace RC
                 --num_unreal_params;
 
                 // Set up the return value param so that Lua can access the original return value
-                auto return_property = context.TheStack.CurrentNativeFunction()->GetReturnProperty();
+                auto return_property = FunctionBeingExecuted->GetReturnProperty();
                 auto return_property_type = return_property->GetClass().GetFName();
                 int32_t name_comparison_index = return_property_type.GetComparisonIndex();
                 if (LuaType::StaticState::m_property_value_pushers.contains(name_comparison_index))
@@ -306,7 +308,7 @@ namespace RC
             bool has_properties_to_process = lua_data.has_return_value || num_unreal_params > 0;
             if (has_properties_to_process && context.TheStack.Locals())
             {
-                for (Unreal::FProperty* func_prop : context.TheStack.CurrentNativeFunction()->ForEachProperty())
+                for (Unreal::FProperty* func_prop : FunctionBeingExecuted->ForEachProperty())
                 {
                     // Skip this property if it's not a parameter
                     if (!func_prop->HasAnyPropertyFlags(Unreal::EPropertyFlags::CPF_Parm))
@@ -344,7 +346,7 @@ namespace RC
                     }
                     else
                     {
-                        lua_data.lua.throw_error(std::format(
+                        lua_data.lua.throw_error(fmt::format(
                                 "[unreal_script_function_hook] Tried accessing unreal property without a registered handler. Property type '{}' not supported.",
                                 to_string(property_type.ToString())));
                     }
@@ -627,12 +629,12 @@ namespace RC
         efindname_table.make_global("EFindName");
     }
 
-    LuaMod::LuaMod(UE4SSProgram& program, std::wstring&& mod_name, std::wstring&& mod_path)
+    LuaMod::LuaMod(UE4SSProgram& program, StringType&& mod_name, StringType&& mod_path)
         : Mod(program, std::move(mod_name), std::move(mod_path)), m_lua(LuaMadeSimple::new_state())
     {
         // Verify that there's a 'Scripts' directory
         // Give the full path to the 'Scripts' directory to the mod container
-        m_scripts_path = m_mod_path + L"\\scripts";
+        m_scripts_path = m_mod_path / STR("scripts");
 
         // If the 'Scripts' directory doesn't exist then mark the mod as non-installable and move on to the next mod
         if (!std::filesystem::exists(m_scripts_path))
@@ -815,17 +817,17 @@ namespace RC
 
         lua_getfield(lua_state, -1, "path");
         std::string current_paths = lua_tostring(lua_state, -1);
-        current_paths.append(std::format(";{}\\{}\\Scripts\\?.lua", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
-        current_paths.append(std::format(";{}\\shared\\?.lua", to_string(m_program.get_mods_directory()).c_str()));
-        current_paths.append(std::format(";{}\\shared\\?\\?.lua", to_string(m_program.get_mods_directory()).c_str()));
+        current_paths.append(fmt::format(";{}\\{}\\Scripts\\?.lua", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
+        current_paths.append(fmt::format(";{}\\shared\\?.lua", to_string(m_program.get_mods_directory()).c_str()));
+        current_paths.append(fmt::format(";{}\\shared\\?\\?.lua", to_string(m_program.get_mods_directory()).c_str()));
         lua_pop(lua_state, 1);
         lua_pushstring(lua_state, current_paths.c_str());
         lua_setfield(lua_state, -2, "path");
 
         lua_getfield(lua_state, -1, "cpath");
         std::string current_cpaths = lua_tostring(lua_state, -1);
-        current_cpaths.append(std::format(";{}\\{}\\Scripts\\?.dll", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
-        current_cpaths.append(std::format(";{}\\{}\\?.dll", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
+        current_cpaths.append(fmt::format(";{}\\{}\\Scripts\\?.dll", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
+        current_cpaths.append(fmt::format(";{}\\{}\\?.dll", to_string(m_program.get_mods_directory()).c_str(), to_string(get_name())));
         lua_pop(lua_state, 1);
         lua_pushstring(lua_state, current_cpaths.c_str());
         lua_setfield(lua_state, -2, "cpath");
@@ -836,6 +838,11 @@ namespace RC
     auto static setup_lua_global_functions_internal(const LuaMadeSimple::Lua& lua, Mod::IsTrueMod is_true_mod) -> void
     {
         lua.register_function("print", LuaLibrary::global_print);
+
+        lua.register_function("CreateInvalidObject", [](const LuaMadeSimple::Lua& lua) -> int {
+            LuaType::auto_construct_object(lua, nullptr);
+            return 1;
+        });
 
         lua.register_function("StaticFindObject", [](const LuaMadeSimple::Lua& lua) -> int {
             // Stack size @ the start of the function is the same as the number of params
@@ -857,7 +864,7 @@ Overloads:
             // Ignores any params after P1
             if (lua.is_string())
             {
-                Unreal::UObject* object = Unreal::UObjectGlobals::StaticFindObject(nullptr, nullptr, to_wstring(lua.get_string()));
+                Unreal::UObject* object = Unreal::UObjectGlobals::StaticFindObject(nullptr, nullptr, ensure_str(lua.get_string()));
 
                 // Construct a Lua object of type 'UObject'
                 // Auto constructing is nullptr safe
@@ -881,7 +888,7 @@ Overloads:
 
             Unreal::UClass* param_class{};
             Unreal::UObject* param_in_outer{};
-            std::wstring param_name{};
+            StringType param_name{};
             bool param_exact_class{};
 
             // P1 (Class), userdata
@@ -917,7 +924,7 @@ Overloads:
             // P3 (Name), string
             if (lua.is_string())
             {
-                param_name = to_wstring(lua.get_string());
+                param_name = ensure_str(lua.get_string());
             }
             else
             {
@@ -959,7 +966,7 @@ Overloads:
             // Ignores any params after P1
             if (lua.is_string())
             {
-                Unreal::UObject* object = Unreal::UObjectGlobals::FindFirstOf(to_wstring(lua.get_string()));
+                Unreal::UObject* object = Unreal::UObjectGlobals::FindFirstOf(ensure_str(lua.get_string()));
 
                 // Construct a Lua object of type 'UObject'
                 // Auto constructing is nullptr safe
@@ -1135,7 +1142,7 @@ Overloads:
                     }
                     catch (std::runtime_error& e)
                     {
-                        Output::send(STR("{}\n"), to_wstring(lua.handle_error(e.what())));
+                        Output::send(STR("{}\n"), ensure_str(lua.handle_error(e.what())));
                     }
                 };
 
@@ -1254,7 +1261,7 @@ Overloads:
                     }
                     catch (std::runtime_error& e)
                     {
-                        Output::send(STR("{}\n"), to_wstring(lua.handle_error(e.what())));
+                        Output::send(STR("{}\n"), ensure_str(lua.handle_error(e.what())));
                     }
                 };
 
@@ -1353,8 +1360,8 @@ Overloads:
                     lua.throw_error(error_overload_not_found);
                 }
 
-                std::wstring function_name = to_wstring(lua.get_string());
-                std::wstring function_name_no_prefix = function_name.substr(function_name.find_first_of(L" ") + 1, function_name.size());
+                auto function_name = ensure_str(lua.get_string());
+                auto function_name_no_prefix = function_name.substr(function_name.find_first_of(STR(" ")) + 1, function_name.size());
 
                 Unreal::UFunction* unreal_function = Unreal::UObjectGlobals::StaticFindObject<Unreal::UFunction*>(nullptr, nullptr, function_name_no_prefix);
                 if (!unreal_function)
@@ -1433,7 +1440,7 @@ Overloads:
                 const Mod* mod = get_mod_ref(lua);
                 if (!mod)
                 {
-                    lua.throw_error("Could not dump objects and properties because the pointer to 'Mod' was nullptr");
+                    lua.throw_error("Couldn't dump objects and properties because the pointer to 'Mod' was nullptr");
                 }
                 UE4SSProgram::dump_all_objects_and_properties(mod->m_program.get_object_dumper_output_directory() + STR("\\") +
                                                               UE4SSProgram::m_object_dumper_file_name);
@@ -1442,8 +1449,23 @@ Overloads:
 
             lua.register_function("GenerateSDK", []([[maybe_unused]] const LuaMadeSimple::Lua& lua) -> int {
                 const Mod* mod = get_mod_ref(lua);
+                if (!mod)
+                {
+                    lua.throw_error("Couldn't generate SDK because the pointer to 'Mod' was nullptr");
+                }
                 File::StringType working_dir{mod->m_program.get_working_directory()};
                 mod->m_program.generate_cxx_headers(working_dir + STR("\\CXXHeaderDump"));
+                return 0;
+            });
+
+            lua.register_function("GenerateLuaTypes", []([[maybe_unused]] const LuaMadeSimple::Lua& lua) -> int {
+                const Mod* mod = get_mod_ref(lua);
+                if (!mod)
+                {
+                    lua.throw_error("Couldn't generate lua types because the pointer to 'Mod' was nullptr");
+                }
+                File::StringType working_dir{mod->m_program.get_working_directory()};
+                UE4SSProgram::get_program().generate_lua_types(working_dir + STR("\\Mods\\shared\\types"));
                 return 0;
             });
 
@@ -1615,9 +1637,9 @@ Overloads:
 
             struct PropertyInfo
             {
-                std::wstring name{};
+                StringType name{};
                 PropertyTypeInfo type{}; // Figure out what to do here, it shouldn't be just a string
-                std::wstring belongs_to_class{};
+                StringType belongs_to_class{};
                 int32_t offset_internal{-1};
                 int32_t element_size{-1}; // Is this required for trivial types like integers and floats ?
 
@@ -1696,18 +1718,18 @@ Overloads:
 
                     if (second_field_name.empty())
                     {
-                        error_field_names = std::format("{}", field_name);
+                        error_field_names = fmt::format("{}", field_name);
                     }
                     else if (third_field_name.empty())
                     {
-                        error_field_names = std::format("{}.{}", field_name, second_field_name);
+                        error_field_names = fmt::format("{}.{}", field_name, second_field_name);
                     }
                     else
                     {
-                        error_field_names = std::format("{}.{}.{}", field_name, second_field_name, third_field_name);
+                        error_field_names = fmt::format("{}.{}.{}", field_name, second_field_name, third_field_name);
                     }
 
-                    lua.throw_error(std::format(
+                    lua.throw_error(fmt::format(
                             "Parameter #1 for function 'RegisterCustomProperty'. The table value for key '{}' is outside the range of a 32-bit integer",
                             error_field_names));
                 }
@@ -1716,12 +1738,12 @@ Overloads:
             };
 
             // Always required, for all property types
-            property_info.name = to_wstring(lua_table.get_string_field("Name"));
+            property_info.name = ensure_str(lua_table.get_string_field("Name"));
             property_info.type.name = lua_table.get_table_field("Type").get_string_field("Name");
             property_info.type.size = verify_and_convert_int64_to_int32("Type", "Size");
             property_info.type.ffieldclass_pointer = reinterpret_cast<void*>(lua_table.get_table_field("Type").get_int_field("FFieldClassPointer"));
             property_info.type.static_pointer = reinterpret_cast<void*>(lua_table.get_table_field("Type").get_int_field("StaticPointer"));
-            property_info.belongs_to_class = to_wstring(lua_table.get_string_field("BelongsToClass"));
+            property_info.belongs_to_class = ensure_str(lua_table.get_string_field("BelongsToClass"));
 
             std::string oi_property_name;
             int32_t oi_relative_offset{};
@@ -1772,11 +1794,11 @@ Overloads:
 
             if (property_info.offset_internal_is_table)
             {
-                auto name = Unreal::FName(to_wstring(oi_property_name));
+                auto name = Unreal::FName(ensure_str(oi_property_name));
                 Unreal::FProperty* oi_property = belongs_to_class->FindProperty(name);
                 if (!oi_property)
                 {
-                    lua.throw_error(std::format("Was unable to find property '{}' in class '{}' for use for relative Offset_Internal",
+                    lua.throw_error(fmt::format("Was unable to find property '{}' in class '{}' for use for relative Offset_Internal",
                                                 oi_property_name,
                                                 to_string(property_info.belongs_to_class)));
                 }
@@ -1786,14 +1808,14 @@ Overloads:
 
             if (property_info.type.size == 0)
             {
-                lua.throw_error(std::format("The size for property '{}' was unknown. Custom sizes are unsupported but will likely be supported in the future.",
+                lua.throw_error(fmt::format("The size for property '{}' was unknown. Custom sizes are unsupported but will likely be supported in the future.",
                                             property_info.type.name));
             }
 
             if (property_info.is_array_property && property_info.array_inner.size == 0)
             {
                 lua.throw_error(
-                        std::format("The size for inner property '{}' was unknown. Custom sizes are unsupported but will likely be supported in the future.",
+                        fmt::format("The size for inner property '{}' was unknown. Custom sizes are unsupported but will likely be supported in the future.",
                                     property_info.array_inner.name));
             }
 
@@ -1809,14 +1831,14 @@ Overloads:
 
             printf_s("Registered Custom Property\n");
             printf_s("PropertyInfo {\n");
-            printf_s("\tName: %S\n", property_info.name.c_str());
+            printf_s("\tName: %S\n", FromCharTypePtr<wchar_t>(property_info.name.c_str()));
             printf_s("\tType {\n");
             printf_s("\t\tName: %s\n", property_info.type.name.data());
             printf_s("\t\tSize: 0x%X\n", property_info.type.size);
             printf_s("\t\tFFieldClassPointer: 0x%p\n", property_info.type.ffieldclass_pointer);
             printf_s("\t\tStaticPointer: 0x%p\n", property_info.type.static_pointer);
             printf_s("\t}\n");
-            printf_s("\tBelongsToClass: %S\n", property_info.belongs_to_class.c_str());
+            printf_s("\tBelongsToClass: %S\n", FromCharTypePtr<wchar_t>(property_info.belongs_to_class.c_str()));
             printf_s("\tOffsetInternal: 0x%X\n", property_info.offset_internal);
 
             if (property_info.is_array_property)
@@ -1868,7 +1890,7 @@ Overloads:
                 lua.throw_error(error_overload_not_found);
             }
 
-            std::wstring class_name = to_wstring(lua.get_string());
+            auto class_name = ensure_str(lua.get_string());
 
             if (!lua.is_function())
             {
@@ -1878,17 +1900,17 @@ Overloads:
             auto mod = get_mod_ref(lua);
             auto hook_lua = make_hook_state(mod);
 
+            // Duplicate the Lua function to the top of the stack for lua_xmove and luaL_ref
+            lua_pushvalue(lua.get_lua_state(), 1);
+
             lua_xmove(lua.get_lua_state(), hook_lua->get_lua_state(), 1);
 
-            // Take a reference to the Lua function (it also pops it of the stack)
-            const int32_t lua_callback_registry_index = hook_lua->registry().make_ref();
+            const auto func_ref = hook_lua->registry().make_ref();
+            const auto thread_ref = mod->lua().registry().make_ref();
 
             Unreal::UClass* instance_of_class = Unreal::UObjectGlobals::StaticFindObject<Unreal::UClass*>(nullptr, nullptr, class_name);
 
-            LuaMod::m_static_construct_object_lua_callbacks.emplace_back(
-                    LuaMod::LuaCallbackData{*hook_lua,
-                                            instance_of_class,
-                                            {std::pair<const LuaMadeSimple::Lua*, LuaMod::LuaCallbackData::RegistryIndex>{hook_lua, lua_callback_registry_index}}});
+            LuaMod::m_static_construct_object_lua_callbacks.emplace_back(LuaMod::LuaCancellableCallbackData{hook_lua, instance_of_class, func_ref, thread_ref});
 
             return 0;
         });
@@ -1904,7 +1926,7 @@ Overloads:
                 lua.throw_error(error_overload_not_found);
             }
 
-            std::wstring event_name = to_wstring(lua.get_string());
+            auto event_name = ensure_str(lua.get_string());
 
             if (!lua.is_function())
             {
@@ -1940,7 +1962,7 @@ Overloads:
             {
                 lua.throw_error(error_overload_not_found);
             }
-            auto custom_event_name = to_wstring(lua.get_string());
+            auto custom_event_name = ensure_str(lua.get_string());
 
             LuaMod::m_custom_event_callbacks.erase(custom_event_name);
 
@@ -2119,8 +2141,8 @@ No overload found for function 'IterateGameDirectories'.
 Overloads:
 #1: IterateGameDirectories()"};
 
-            std::filesystem::path module_directory = UE4SSProgram::get_program().get_module_directory();
-            auto game_content_dir = module_directory.parent_path().parent_path().parent_path() / "Content";
+            std::filesystem::path game_executable_directory = UE4SSProgram::get_program().get_game_executable_directory();
+            auto game_content_dir = game_executable_directory.parent_path().parent_path() / "Content";
             if (!std::filesystem::exists(game_content_dir))
             {
                 Output::send<LogLevel::Warning>(STR("IterateGameDirectories: Could not locate the root directory because the directory structure is unknown "
@@ -2129,8 +2151,8 @@ Overloads:
                 return 1;
             }
 
-            auto game_name = module_directory.parent_path().parent_path().parent_path().stem();
-            auto game_root_directory = module_directory.parent_path().parent_path().parent_path().parent_path();
+            auto game_name = game_executable_directory.parent_path().parent_path().stem();
+            auto game_root_directory = game_executable_directory.parent_path().parent_path().parent_path();
             auto directories_table = lua.prepare_new_table();
 
             std::function<void(const std::filesystem::path&, LuaMadeSimple::Lua::Table&)> iterate_directory =
@@ -2198,17 +2220,18 @@ Overloads:
                                     }
                                     const auto current_path = std::string{lua.get_string()};
                                     auto files_table = lua.prepare_new_table();
-                                    for (int i = 1; const auto& item : std::filesystem::directory_iterator(current_path))
+                                    auto index = 1;
+                                    for (const auto& item : std::filesystem::directory_iterator(current_path))
                                     {
                                         if (!item.is_directory())
                                         {
-                                            files_table.add_key(i);
+                                            files_table.add_key(index);
                                             auto file_table = lua.prepare_new_table();
                                             file_table.add_pair("__name", to_string(item.path().filename().wstring()).c_str());
                                             file_table.add_pair("__absolute_path", to_string(item.path().wstring()).c_str());
                                             files_table.fuse_pair();
                                         }
-                                        ++i;
+                                        ++index;
                                     }
                                     return 1;
                                 }
@@ -2234,8 +2257,8 @@ No overload found for function 'CreateLogicModsDirectory'.
 Overloads:
 #1: CreateLogicModsDirectory()"};
 
-            std::filesystem::path module_directory = UE4SSProgram::get_program().get_module_directory();
-            auto game_content_dir = module_directory.parent_path().parent_path().parent_path() / "Content";
+            std::filesystem::path game_executable_directory = UE4SSProgram::get_program().get_game_executable_directory();
+            auto game_content_dir = game_executable_directory.parent_path().parent_path() / "Content";
             if (!std::filesystem::exists(game_content_dir))
             {
                 lua.throw_error("CreateLogicModsDirectory: Could not locate the \"Content\" directory because the directory structure is unknown (not "
@@ -2483,7 +2506,7 @@ Overloads:
             {
                 throw std::runtime_error{error_overload_not_found};
             }
-            auto command_name = to_wstring(lua.get_string());
+            auto command_name = ensure_str(lua.get_string());
 
             if (!lua.is_function())
             {
@@ -2518,7 +2541,7 @@ Overloads:
             {
                 throw std::runtime_error{error_overload_not_found};
             }
-            auto command_name = to_wstring(lua.get_string());
+            auto command_name = ensure_str(lua.get_string());
 
             if (!lua.is_function())
             {
@@ -2558,7 +2581,7 @@ Overloads:
             {
                 throw std::runtime_error{error_overload_not_found};
             }
-            auto asset_path_and_name = Unreal::FName(to_wstring(lua.get_string()), Unreal::FNAME_Add);
+            auto asset_path_and_name = Unreal::FName(ensure_str(lua.get_string()), Unreal::FNAME_Add);
 
             auto* asset_registry = static_cast<Unreal::UAssetRegistry*>(Unreal::UAssetRegistryHelpers::GetAssetRegistry().ObjectPointer);
             if (!asset_registry)
@@ -2609,7 +2632,7 @@ Overloads:
             bool could_be_in_class{};
             if (lua.is_string())
             {
-                object_class_name = Unreal::FName(to_wstring(lua.get_string()), Unreal::FNAME_Add);
+                object_class_name = Unreal::FName(ensure_str(lua.get_string()), Unreal::FNAME_Add);
             }
             else if (lua.is_userdata())
             {
@@ -2652,7 +2675,7 @@ Overloads:
             bool could_be_object_short_name{};
             if (lua.is_string())
             {
-                object_short_name = Unreal::FName(to_wstring(lua.get_string()), Unreal::FNAME_Add);
+                object_short_name = Unreal::FName(ensure_str(lua.get_string()), Unreal::FNAME_Add);
                 could_be_object_short_name = true;
             }
             else if (lua.is_userdata())
@@ -2736,7 +2759,7 @@ Overloads:
 
             if (could_be_in_class && could_be_in_outer && could_be_in_name)
             {
-                LuaType::auto_construct_object(lua, Unreal::UObjectGlobals::FindObject(in_class, in_outer, to_wstring(in_name), exact_class));
+                LuaType::auto_construct_object(lua, Unreal::UObjectGlobals::FindObject(in_class, in_outer, ensure_str(in_name), exact_class));
             }
             else
             {
@@ -2783,7 +2806,7 @@ Overloads:
             bool object_class_name_supplied{true};
             if (lua.is_string())
             {
-                object_class_name = Unreal::FName(to_wstring(lua.get_string()), Unreal::FNAME_Add);
+                object_class_name = Unreal::FName(ensure_str(lua.get_string()), Unreal::FNAME_Add);
             }
             else if (lua.is_userdata())
             {
@@ -2821,7 +2844,7 @@ Overloads:
             Unreal::FName object_short_name{};
             if (lua.is_string())
             {
-                object_short_name = Unreal::FName(to_wstring(lua.get_string()), Unreal::FNAME_Add);
+                object_short_name = Unreal::FName(ensure_str(lua.get_string()), Unreal::FNAME_Add);
             }
             else if (lua.is_userdata())
             {
@@ -2963,8 +2986,8 @@ Overloads:
                 lua.throw_error(error_overload_not_found);
             }
 
-            std::wstring function_name = to_wstring(lua.get_string());
-            std::wstring function_name_no_prefix = function_name.substr(function_name.find_first_of(L"/"), function_name.size());
+            auto function_name = ensure_str(lua.get_string());
+            auto function_name_no_prefix = function_name.substr(function_name.find_first_of(STR("/")), function_name.size());
 
             if (!lua.is_function())
             {
@@ -3039,10 +3062,10 @@ Overloads:
             else
             {
                 std::string error_message{"Was unable to register a hook with Lua function 'RegisterHook', information:\n"};
-                error_message.append(std::format("UFunction::Func: {}\n", std::bit_cast<void*>(func_ptr)));
-                error_message.append(std::format("ProcessInternal: {}\n", Unreal::UObject::ProcessInternalInternal.get_function_address()));
+                error_message.append(fmt::format("UFunction::Func: {}\n", std::bit_cast<void*>(func_ptr)));
+                error_message.append(fmt::format("ProcessInternal: {}\n", Unreal::UObject::ProcessInternalInternal.get_function_address()));
                 error_message.append(
-                        std::format("FUNC_Native: {}\n", static_cast<uint32_t>(unreal_function->HasAnyFunctionFlags(Unreal::EFunctionFlags::FUNC_Native))));
+                        fmt::format("FUNC_Native: {}\n", static_cast<uint32_t>(unreal_function->HasAnyFunctionFlags(Unreal::EFunctionFlags::FUNC_Native))));
                 lua.throw_error(error_message);
             }
 
@@ -3247,7 +3270,7 @@ Overloads:
                 lua.throw_error(error_overload_not_found);
             }
 
-            File::StringType PossiblyLongName = to_wstring(lua.get_string());
+            File::StringType PossiblyLongName = ensure_str(lua.get_string());
             lua.set_bool(Unreal::FPackageName::IsShortPackageName(PossiblyLongName));
 
             return 1;
@@ -3264,7 +3287,7 @@ Overloads:
                 lua.throw_error(error_overload_not_found);
             }
 
-            File::StringType InLongPackageName = to_wstring(lua.get_string());
+            File::StringType InLongPackageName = ensure_str(lua.get_string());
             lua.set_bool(Unreal::FPackageName::IsValidLongPackageName(InLongPackageName));
 
             return 1;
@@ -3311,7 +3334,7 @@ Overloads:
             return;
         }
 
-        for (const auto& mod : UE4SSProgram::m_mods)
+        for (const auto& mod : UE4SSProgram::get_program().m_mods)
         {
             if (auto cpp_mod = dynamic_cast<CppMod*>(mod.get()); cpp_mod && mod->is_started())
             {
@@ -3331,7 +3354,7 @@ Overloads:
             return;
         }
 
-        for (const auto& mod : UE4SSProgram::m_mods)
+        for (const auto& mod : UE4SSProgram::get_program().m_mods)
         {
             if (auto cpp_mod = dynamic_cast<CppMod*>(mod.get()); cpp_mod && mod->is_started())
             {
@@ -3361,11 +3384,11 @@ Overloads:
         // Don't crash on syntax errors.
         try
         {
-            main_lua()->execute_file(m_scripts_path + L"\\main.lua");
+            main_lua()->execute_file((m_scripts_path / STR("main.lua")).string());
         }
         catch (std::runtime_error& e)
         {
-            Output::send<LogLevel::Error>(STR("{}\n"), to_wstring(e.what()));
+            Output::send<LogLevel::Error>(STR("{}\n"), ensure_str(e.what()));
         }
     }
 
@@ -3529,7 +3552,7 @@ Overloads:
                             }
                             else
                             {
-                                lua.throw_error(std::format(
+                                lua.throw_error(fmt::format(
                                         "[script_hook] Tried accessing unreal property without a registered handler. Property type '{}' not supported.",
                                         to_string(param_type.ToString())));
                             }
@@ -3561,8 +3584,8 @@ Overloads:
                             }
                             else
                             {
-                                std::wstring return_property_type_name = return_property_type.ToString();
-                                std::wstring return_property_name = return_property->GetName();
+                                auto return_property_type_name = return_property_type.ToString();
+                                auto return_property_name = return_property->GetName();
 
                                 Output::send(STR("Tried altering return value of a custom BP function without a registered handler for return type Return "
                                                  "property '{}' of type '{}' not supported."),
@@ -3762,25 +3785,32 @@ Overloads:
             Unreal::UStruct* object_class = constructed_object->GetClassPrivate();
             while (object_class)
             {
-                for (const auto& callback_data : m_static_construct_object_lua_callbacks)
-                {
+                std::erase_if(m_static_construct_object_lua_callbacks, [&](auto& callback_data) -> bool {
+                    bool cancel = false;
                     if (callback_data.instance_of_class == object_class)
                     {
                         try
                         {
-                            for (const auto& [lua, registry_index] : callback_data.registry_indexes)
-                            {
-                                callback_data.lua.registry().get_function_ref(registry_index.lua_index);
-                                LuaType::auto_construct_object(callback_data.lua, constructed_object);
-                                callback_data.lua.call_function(1, 0);
-                            }
+                            callback_data.lua->registry().get_function_ref(callback_data.lua_callback_function_ref);
+                            LuaType::auto_construct_object(*callback_data.lua, constructed_object);
+                            callback_data.lua->call_function(1, 1);
+
+                            cancel = callback_data.lua->is_bool(-1) && callback_data.lua->get_bool(-1);
                         }
                         catch (std::runtime_error& e)
                         {
-                            Output::send(STR("{}\n"), to_wstring(e.what()));
+                            Output::send(STR("{}\n"), ensure_str(e.what()));
+                        }
+
+                        if (cancel)
+                        {
+                            // Release the thread_ref to GC.
+                            luaL_unref(callback_data.lua->get_lua_state(), LUA_REGISTRYINDEX, callback_data.lua_callback_thread_ref);
                         }
                     }
-                }
+
+                    return cancel;
+                });
 
                 object_class = object_class->GetSuperStruct();
             }
@@ -4007,37 +4037,37 @@ Overloads:
         // Lua from the in-game console.
         Unreal::Hook::RegisterProcessConsoleExecCallback([](Unreal::UObject* context, const TCHAR* cmd, Unreal::FOutputDevice& ar, Unreal::UObject* executor) -> bool {
             auto logln = [&ar](const File::StringType& log_message) {
-                Output::send(std::format(STR("{}\n"), log_message));
-                ar.Log(log_message.c_str());
+                Output::send(fmt::format(STR("{}\n"), log_message));
+                ar.Log(FromCharTypePtr<TCHAR>(log_message.c_str()));
             };
 
-            if (!LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{cmd}, STR("luastart")))
+            if (!LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{ToCharTypePtr(cmd)}, File::StringViewType {STR("luastart")}))
             {
                 start_console_lua_executor();
                 logln(STR("Console Lua executor started"));
                 return true;
             }
-            else if (LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{cmd}, STR("luastop")))
+            else if (LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{ToCharTypePtr(cmd)}, File::StringViewType {STR("luastop")}))
             {
                 stop_console_lua_executor();
                 logln(STR("Console Lua executor stopped"));
                 return true;
             }
-            else if (LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{cmd}, STR("luarestart")))
+            else if (LuaStatics::console_executor_enabled && String::iequal(File::StringViewType{ToCharTypePtr(cmd)}, File::StringViewType {STR("luarestart")}))
             {
                 stop_console_lua_executor();
                 start_console_lua_executor();
                 logln(STR("Console Lua executor restarted"));
                 return true;
             }
-            else if (String::iequal(File::StringViewType{cmd}, STR("clear")))
+            else if (String::iequal(File::StringViewType{ToCharTypePtr(cmd)}, File::StringViewType{STR("clear")}))
             {
                 // TODO: Replace with proper implementation when we have UGameViewportClient and UConsole.
                 //       This should be fairly cross-game & cross-engine-version compatible even without the proper implementation.
                 //       This is because I don't think they've changed the layout here and we have a reflected property right before the unreflected one that we're looking for.
-                Unreal::UObject** console = static_cast<Unreal::UObject**>(context->GetValuePtrByPropertyName(STR("ViewportConsole")));
+                Unreal::UObject** console = static_cast<Unreal::UObject**>(context->GetValuePtrByPropertyName(FromCharTypePtr<TCHAR>(STR("ViewportConsole"))));
                 auto* default_texture_white = std::bit_cast<Unreal::TArray<Unreal::FString>*>(
-                        static_cast<uint8_t*>((*console)->GetValuePtrByPropertyNameInChain(STR("DefaultTexture_White"))) + 0x8);
+                        static_cast<uint8_t*>((*console)->GetValuePtrByPropertyNameInChain(FromCharTypePtr<TCHAR>(STR("DefaultTexture_White")))) + 0x8);
                 auto* scrollback = std::bit_cast<int32_t*>(std::bit_cast<uint8_t*>(default_texture_white) + 0x10);
                 default_texture_white->SetNum(0);
                 default_texture_white->SetMax(0);
@@ -4054,25 +4084,25 @@ Overloads:
 
                 LuaLibrary::set_outputdevice_ref(*LuaStatics::console_executor, &ar);
 
-                // logln(std::format(STR("Executing '{}' as Lua"), cmd));
+                // logln(fmt::format(STR("Executing '{}' as Lua"), cmd));
 
                 try
                 {
                     if (int status = luaL_loadstring(LuaStatics::console_executor->get_lua_state(), to_string(cmd).c_str()); status != LUA_OK)
                     {
                         LuaStatics::console_executor->throw_error(
-                                std::format("luaL_loadstring returned {}", LuaStatics::console_executor->resolve_status_message(status, true)));
+                                fmt::format("luaL_loadstring returned {}", LuaStatics::console_executor->resolve_status_message(status, true)));
                     }
 
                     if (int status = lua_pcall(LuaStatics::console_executor->get_lua_state(), 0, LUA_MULTRET, 0); status != LUA_OK)
                     {
                         LuaStatics::console_executor->throw_error(
-                                std::format("lua_pcall returned {}", LuaStatics::console_executor->resolve_status_message(status, true)));
+                                fmt::format("lua_pcall returned {}", LuaStatics::console_executor->resolve_status_message(status, true)));
                     }
                 }
                 catch (std::runtime_error& e)
                 {
-                    logln(to_wstring(e.what()));
+                    logln(ensure_str(e.what()));
                 }
 
                 // We always return true when the console Lua executor is enabled in order to suppress other handlers
@@ -4088,8 +4118,8 @@ Overloads:
         Unreal::Hook::RegisterProcessConsoleExecGlobalPreCallback(
                 [](Unreal::UObject* context, const TCHAR* cmd, Unreal::FOutputDevice& ar, Unreal::UObject* executor) -> std::pair<bool, bool> {
                     return TRY([&] {
-                        auto command = File::StringViewType{cmd};
-                        auto command_parts = explode_by_occurrence(cmd, ' ');
+                        auto command = File::StringType {ToCharTypePtr(cmd)};
+                        auto command_parts = explode_by_occurrence_with_quotes(command, STR(' '));
 
                         for (const auto& callback_data : m_process_console_exec_pre_callbacks)
                         {
@@ -4105,10 +4135,10 @@ Overloads:
                                 LuaType::RemoteUnrealParam::construct(callback_data.lua, &context, s_object_property_name);
                                 callback_data.lua.set_string(to_string(command));
                                 auto params_table = callback_data.lua.prepare_new_table();
-                                for (size_t i = 1; i < command_parts.size(); ++i)
+                                for (size_t i = 0; i < command_parts.size(); ++i)
                                 {
                                     const auto& command_part = command_parts[i];
-                                    params_table.add_pair(i, to_string(command_part).c_str());
+                                    params_table.add_pair(i + 1, to_string(command_part).c_str());
                                 }
                                 LuaType::FOutputDevice::construct(callback_data.lua, &ar);
                                 LuaType::RemoteUnrealParam::construct(callback_data.lua, &executor, s_object_property_name);
@@ -4144,8 +4174,8 @@ Overloads:
         Unreal::Hook::RegisterProcessConsoleExecGlobalPostCallback(
                 [](Unreal::UObject* context, const TCHAR* cmd, Unreal::FOutputDevice& ar, Unreal::UObject* executor) -> std::pair<bool, bool> {
                     return TRY([&] {
-                        auto command = File::StringViewType{cmd};
-                        auto command_parts = explode_by_occurrence(cmd, ' ');
+                        auto command = File::StringType {ToCharTypePtr(cmd)};
+                        auto command_parts = explode_by_occurrence_with_quotes(command, STR(' '));
 
                         for (const auto& callback_data : m_process_console_exec_post_callbacks)
                         {
@@ -4161,15 +4191,15 @@ Overloads:
                                 LuaType::RemoteUnrealParam::construct(callback_data.lua, &context, s_object_property_name);
                                 callback_data.lua.set_string(to_string(command));
                                 auto params_table = callback_data.lua.prepare_new_table();
-                                for (size_t i = 1; i < command_parts.size(); ++i)
+                                for (size_t i = 0; i < command_parts.size(); ++i)
                                 {
                                     const auto& command_part = command_parts[i];
-                                    params_table.add_pair(i, to_string(command_part).c_str());
+                                    params_table.add_pair(i + 1, to_string(command_part).c_str());
                                 }
                                 LuaType::FOutputDevice::construct(callback_data.lua, &ar);
                                 LuaType::RemoteUnrealParam::construct(callback_data.lua, &executor, s_object_property_name);
 
-                                callback_data.lua.call_function(4, 1);
+                                callback_data.lua.call_function(5, 1);
 
                                 if (callback_data.lua.is_nil())
                                 {
@@ -4206,16 +4236,12 @@ Overloads:
             }
 
             return TRY([&] {
-                auto command = File::StringViewType{cmd};
-                auto command_parts = explode_by_occurrence(cmd, ' ');
-                File::StringType command_name;
+                auto command = File::StringType {ToCharTypePtr(cmd)};
+                auto command_parts = explode_by_occurrence_with_quotes(command, STR(' '));
+                File::StringType command_name = command;
                 if (command_parts.size() > 1)
                 {
                     command_name = command_parts[0];
-                }
-                else
-                {
-                    command_name = command;
                 }
 
                 if (auto it = m_custom_command_lua_pre_callbacks.find(command_name); it != m_custom_command_lua_pre_callbacks.end())
@@ -4266,16 +4292,12 @@ Overloads:
             (void)executor;
 
             return TRY([&] {
-                auto command = File::StringViewType{cmd};
-                auto command_parts = explode_by_occurrence(cmd, ' ');
-                File::StringType command_name;
+                auto command = File::StringType{ToCharTypePtr(cmd)};
+                auto command_parts = explode_by_occurrence_with_quotes(command, STR(' '));
+                File::StringType command_name = command;
                 if (command_parts.size() > 1)
                 {
                     command_name = command_parts[0];
-                }
-                else
-                {
-                    command_name = command;
                 }
 
                 if (auto it = m_global_command_lua_callbacks.find(command_name); it != m_global_command_lua_callbacks.end())
@@ -4386,8 +4408,8 @@ Overloads:
                                                        catch (std::runtime_error& e)
                                                        {
                                                            Output::send(STR("[{}] {}\n"),
-                                                                        to_wstring(action.type == LuaMod::ActionType::Loop ? "LoopAsync" : "DelayedAction"),
-                                                                        to_wstring(e.what()));
+                                                                        ensure_str(action.type == LuaMod::ActionType::Loop ? "LoopAsync" : "DelayedAction"),
+                                                                        ensure_str(e.what()));
                                                        }
 
                                                        return result;

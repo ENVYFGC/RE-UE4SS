@@ -25,10 +25,9 @@ namespace RC
         UE4SSProgram& m_program;
 
       protected:
-#pragma warning(disable : 4251)
-        std::wstring m_mod_name;
-        std::wstring m_mod_path;
-#pragma warning(default : 4251)
+        StringType m_mod_name;
+        std::filesystem::path m_mod_path;
+
 
       protected:
         // Whether the mod can be installed
@@ -45,11 +44,11 @@ namespace RC
         };
 
       public:
-        Mod(UE4SSProgram&, std::wstring&& mod_name, std::wstring&& mod_path);
+        Mod(UE4SSProgram&, StringType&& mod_name, std::filesystem::path&& mod_path);
         virtual ~Mod() = default;
 
       public:
-        auto get_name() const -> std::wstring_view;
+        auto get_name() const -> StringViewType;
 
         virtual auto start_mod() -> void = 0;
         virtual auto uninstall() -> void = 0;
@@ -65,6 +64,8 @@ namespace RC
         virtual auto fire_update() -> void;
 
         virtual auto fire_unreal_init() -> void{};
+
+        virtual auto fire_ui_init() -> void{};
 
         // Called once when the program is starting, after mods are setup but before any mods have been started
         virtual auto fire_program_start() -> void{};

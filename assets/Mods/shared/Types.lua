@@ -277,8 +277,32 @@ EInternalObjectFlags = {
 ---@alias float number
 ---@alias double number
 
-
 -- # Global Functions
+
+---Creates an blank UObject whose IsValid function always returns false
+---@return UObject
+function CreateInvalidObject() end
+
+---Dumps all objects and properties to UE4SS_ObjectDump.txt file
+function DumpAllObjects() end
+
+---Generates CXX Headers / CXXHeaderDump
+function GenerateSDK() end
+
+---Generates lua types in /Mods/shared/types
+function GenerateLuaTypes() end
+
+---Generates UHT Compatible Headers
+function GenerateUHTCompatibleHeaders() end
+
+---Dumps Static Meshes to *-ue4ss_static_mesh_data.csv file
+function DumpStaticMeshes() end
+
+---Dumps all current existing actors to *-ue4ss_actor_data.csv file
+function DumpAllActors() end
+
+--- Generates .usmap file
+function DumpUSMAP() end
 
 ---@param ObjectName string
 ---@return UObject
@@ -294,7 +318,7 @@ function StaticFindObject(Class, InOuter, ObjectName, ExactClass) end
 
 ---Find the first non-default instance of the supplied class name
 ---@param ShortClassName string Should only contains the class name itself without path info
----@return UObject?
+---@return UObject
 function FindFirstOf(ShortClassName) end
 
 ---Find all non-default instances of the supplied class name
@@ -345,15 +369,36 @@ function UnregisterHook(UFunctionName, PreId, PostId) end
 ---@param Callback fun()
 function ExecuteInGameThread(Callback) end
 
----Returns the FName for this string/ComparisonIndex or the FName for "None" if the name doesn't exist
+---FName with "None" as value
+NAME_None = FName(0)
+
+---@enum EFindName
+EFindName = {
+    FNAME_Find = 0,
+    FNAME_Add = 1
+}
+
+---Returns the FName for this string or the FName for "None" if the name doesn't exist
 ---@param Name string
 ---@return FName
 function FName(Name) end
 
----Returns the FName for this string/ComparisonIndex or the FName for "None" if the name doesn't exist
+---Returns the FName for this ComparisonIndex or the FName for "None" if the name doesn't exist
 ---@param ComparisonIndex integer
 ---@return FName
 function FName(ComparisonIndex) end
+
+---Finds or adds FName for the string, depending on FindType 
+---@param Name string
+---@param FindType EFindName|integer # Find = 0, Add = 1
+---@return FName
+function FName(Name, FindType) end
+
+---Finds or adds FName for the ComparisonIndex, depending on FindType 
+---@param ComparisonIndex integer
+---@param FindType EFindName|integer # Find = 0, Add = 1
+---@return FName
+function FName(ComparisonIndex, FindType) end
 
 ---Attempts to construct a UObject of the passed UClass
 ---(>=4.26) Maps to https://docs.unrealengine.com/4.27/en-US/API/Runtime/CoreUObject/UObject/StaticConstructObject_Internal/1/
@@ -552,8 +597,99 @@ function LoopAsync(DelayInMilliseconds, Callback) end
 ---You also use `.__name` and `.__absolute_path` for files.
 function IterateGameDirectories() end
 
-
 -- # Classes
+
+---Class for interacting with UE4SS metadata
+---@class UE4SS
+UE4SS = {}
+
+---Returns current version of UE4SS
+---@return integer, integer, integer
+function UE4SS:GetVersion() end
+
+---Returns current version of UE4SS
+---@return integer, integer, integer
+function UE4SS.GetVersion() end
+
+---Contains helper functions for retrieving which version of Unreal Engine that is being used.
+---@class UnrealVersion
+UnrealVersion = {}
+
+---Returns major version of game's Unreal Engine
+---@return integer
+function UnrealVersion:GetMajor() end
+
+---Returns major version of game's Unreal Engine
+---@return integer
+function UnrealVersion.GetMajor() end
+
+---Returns minor version of game's Unreal Engine
+---@return integer
+function UnrealVersion:GetMinor() end
+
+---Returns minor version of game's Unreal Engine
+---@return integer
+function UnrealVersion.GetMinor() end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion:IsEqual(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion.IsEqual(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion:IsAtLeast(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion.IsAtLeast(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion:IsAtMost(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion.IsAtMost(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion:IsBelow(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion.IsBelow(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion:IsAbove(MajorVersion, MinorVersion) end
+
+---Compares game's Unreal Engine version
+---@param MajorVersion integer
+---@param MinorVersion integer
+---@return boolean
+function UnrealVersion.IsAbove(MajorVersion, MinorVersion) end
 
 ---@class UFunction : UObject
 UFunction = {}
@@ -592,10 +728,22 @@ function FieldClass:GetFName() end
 
 
 ---@class FName
+FName = {}
 
+---Returns the content as string
+---@return string
+function FName:ToString() end
+
+---Returns the ComparisonIndex (index in global names array)
+---@return integer
+function FName:GetComparisonIndex() end
 
 ---@class FText
+FText = {}
 
+---Returns the content as string
+---@return string
+function FText:ToString() end
 
 ---@class RemoteObject
 RemoteObject = {}
@@ -702,7 +850,7 @@ function UObject:GetFullName() end
 
 ---Returns the FName of this object by copy
 ---All FNames returned by `__index` are returned by reference
----@retur FName
+---@return FName
 function UObject:GetFName() end
 
 ---Returns the memory address of this object
@@ -786,6 +934,31 @@ function UObject:type() end
 
 ---@class TArray<T> : { [integer]: T }
 TArray = {}
+
+---Return the address in memory where the TArray struct is located
+---@return integer
+function TArray:GetArrayAddress() end
+
+---Return the number of current elements in the array (same as #TArray)
+---@return integer
+function TArray:GetArrayNum() end
+
+---Return the maximum number of elements allowed in this array (array's capacity)
+---@return integer
+function TArray:GetArrayMax() end
+
+---Return the address in memory where the data for this array is stored
+---@return integer
+function TArray:GetArrayDataAddress() end
+
+---Clears the array
+function TArray:Empty() end
+
+---Iterates the entire `TArray` and calls the callback function for each element in the array.<br>
+---The callback params are: `integer index`, `RemoteUnrealParam element` | `LocalUnrealParam element`.<br>
+---Use `element:get()` and `element:set()` to access/mutate an array element.
+---@param Callback fun(index: integer, element: RemoteUnrealParam)
+function TArray:ForEach(Callback) end
 
 ---@class TSet<K> : { [K]: nil }
 

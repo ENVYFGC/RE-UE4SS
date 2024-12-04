@@ -6,11 +6,13 @@
 #include <Helpers/String.hpp>
 #include <Mod/CppMod.hpp>
 
+#include <Windows.h>
+
 namespace RC
 {
-    CppMod::CppMod(UE4SSProgram& program, std::wstring&& mod_name, std::wstring&& mod_path) : Mod(program, std::move(mod_name), std::move(mod_path))
+    CppMod::CppMod(UE4SSProgram& program, StringType&& mod_name, StringType&& mod_path) : Mod(program, std::move(mod_name), std::move(mod_path))
     {
-        m_dlls_path = m_mod_path + L"\\dlls";
+        m_dlls_path = m_mod_path / STR("dlls");
 
         if (!std::filesystem::exists(m_dlls_path))
         {
@@ -19,14 +21,14 @@ namespace RC
             return;
         }
 
-        auto dll_path = m_dlls_path + L"\\main.dll";
+        auto dll_path = m_dlls_path / STR("main.dll");
         // Add mods dlls directory to search path for dynamic/shared linked libraries in mods
         m_dlls_path_cookie = AddDllDirectory(m_dlls_path.c_str());
-        m_main_dll_module = LoadLibraryW(dll_path.c_str());
+        m_main_dll_module = LoadLibraryExW(dll_path.c_str(), NULL, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 
         if (!m_main_dll_module)
         {
-            Output::send<LogLevel::Warning>(STR("Failed to load dll <{}> for mod {}, error code: 0x{:x}\n"), dll_path, m_mod_name, GetLastError());
+            Output::send<LogLevel::Warning>(STR("Failed to load dll <{}> for mod {}, error code: 0x{:x}\n"), ensure_str(dll_path), m_mod_name, GetLastError());
             set_installable(false);
             return;
         }
@@ -58,9 +60,9 @@ namespace RC
             if (!Output::has_internal_error())
             {
                 Output::send<LogLevel::Warning>(STR("Failed to load dll <{}> for mod {}, because: {}\n"),
-                                                m_dlls_path + L"\\main.dll\n",
+                                                ensure_str((m_dlls_path / STR("main.dll"))),
                                                 m_mod_name,
-                                                to_wstring(e.what()));
+                                                ensure_str(e.what()));
             }
             else
             {
@@ -128,6 +130,14 @@ namespace RC
         }
     }
 
+    auto CppMod::fire_ui_init() -> void
+    {
+        if (m_mod)
+        {
+            m_mod->on_ui_init();
+        }
+    }
+
     auto CppMod::fire_program_start() -> void
     {
         if (m_mod)
@@ -144,7 +154,7 @@ namespace RC
         }
     }
 
-    auto CppMod::fire_dll_load(std::wstring_view dll_name) -> void
+    auto CppMod::fire_dll_load(StringViewType dll_name) -> void
     {
         if (m_mod)
         {
